@@ -521,7 +521,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         match self.parse_whitespace() {
-            Some(b'+') | None => visitor.visit_none(),
+            Some(b'+' | b',') | None => visitor.visit_none(),
             Some(_) => visitor.visit_some(self),
         }
     }
