@@ -10,6 +10,7 @@ use self::map::MapAccess;
 use self::seq::SeqAccess;
 
 mod enum_;
+#[cfg(feature = "heapless")]
 pub mod length_delimited;
 mod map;
 mod seq;
@@ -176,16 +177,14 @@ impl<'a> Deserializer<'a> {
             if self.is_trailing_parsing {
                 self.index = self.slice.len();
                 return Ok(&self.slice[start..]);
-            } else {
-                if let Some(c) = self.peek() {
-                    if (c as char).is_alphanumeric() || (c as char).is_whitespace() {
-                        self.eat_char();
-                    } else {
-                        return Err(Error::EofWhileParsingString);
-                    }
+            } else if let Some(c) = self.peek() {
+                if (c as char).is_alphanumeric() || (c as char).is_whitespace() {
+                    self.eat_char();
                 } else {
-                    return Ok(&self.slice[start..self.index]);
+                    return Err(Error::EofWhileParsingString);
                 }
+            } else {
+                return Ok(&self.slice[start..self.index]);
             }
         }
     }
@@ -758,7 +757,7 @@ where
     from_slice(s.as_bytes())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "heapless"))]
 mod tests {
     use super::length_delimited::LengthDelimited;
     use heapless::String;
