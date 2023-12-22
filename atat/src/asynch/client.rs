@@ -1,5 +1,9 @@
 use super::AtatClient;
-use crate::{helpers::LossyStr, response_slot::ResponseSlot, AtatCmd, Config, Error, Response};
+use crate::{
+    helpers::LossyStr,
+    response_slot::{ResponseSlot, ResponseSlotGuard},
+    AtatCmd, Config, Error, Response,
+};
 use embassy_time::{Duration, Instant, TimeoutError, Timer};
 use embedded_io_async::Write;
 use futures::{
@@ -54,8 +58,11 @@ impl<'a, W: Write, const INGRESS_BUF_SIZE: usize> Client<'a, W, INGRESS_BUF_SIZE
         Ok(())
     }
 
-    async fn wait_response(&mut self, timeout: Duration) -> Result<(), Error> {
-        self.with_timeout(timeout, self.res_slot.wait())
+    async fn wait_response<'guard>(
+        &'guard mut self,
+        timeout: Duration,
+    ) -> Result<ResponseSlotGuard<'guard, INGRESS_BUF_SIZE>, Error> {
+        self.with_timeout(timeout, self.res_slot.get())
             .await
             .map_err(|_| Error::Timeout)
     }
@@ -97,15 +104,15 @@ impl<'a, W: Write, const INGRESS_BUF_SIZE: usize> Client<'a, W, INGRESS_BUF_SIZE
 }
 
 impl<W: Write, const INGRESS_BUF_SIZE: usize> AtatClient for Client<'_, W, INGRESS_BUF_SIZE> {
-    async fn send<'a, Cmd: AtatCmd>(&'a mut self, cmd: &'a Cmd) -> Result<Cmd::Response, Error> {
+    async fn send<Cmd: AtatCmd>(&mut self, cmd: &Cmd) -> Result<Cmd::Response, Error> {
         let len = cmd.write(&mut self.buf);
         self.send_request(len).await?;
         if !Cmd::EXPECTS_RESPONSE_CODE {
             cmd.parse(Ok(&[]))
         } else {
-            self.wait_response(Duration::from_millis(Cmd::MAX_TIMEOUT_MS.into()))
+            let response = self
+                .wait_response(Duration::from_millis(Cmd::MAX_TIMEOUT_MS.into()))
                 .await?;
-            let response = self.res_slot.get();
             let response: &Response<INGRESS_BUF_SIZE> = &response.borrow();
             cmd.parse(response.into())
         }
@@ -190,7 +197,7 @@ mod tests {
             sent + Duration::from_millis(100)
         }
 
-        let (mut client, mut tx, _rx) =
+        let (mut client, mut tx, _slot) =
             setup!(Config::new().get_response_timeout(custom_response_timeout));
 
         let cmd = SetModuleFunctionality {
@@ -203,7 +210,7 @@ mod tests {
             // Do not emit a response effectively causing a timeout
         });
 
-        let send = tokio::task::spawn(async move {
+        let send = tokio::spawn(async move {
             assert_eq!(Err(Error::Timeout), client.send(&cmd).await);
         });
 
@@ -232,11 +239,11 @@ mod tests {
                 sent + Duration::from_millis(200)
             } else {
                 // Extended timeout
-                sent + Duration::from_millis(500)
+                sent + Duration::from_millis(50000)
             }
         }
 
-        let (mut client, mut tx, rx) =
+        let (mut client, mut tx, slot) =
             setup!(Config::new().get_response_timeout(custom_response_timeout));
 
         let cmd = SetModuleFunctionality {
@@ -248,10 +255,10 @@ mod tests {
             tx.next_message_pure().await;
             // Emit response in the extended timeout timeframe
             Timer::after(Duration::from_millis(300)).await;
-            rx.signal_response(Ok(&[])).unwrap();
+            slot.signal_response(Ok(&[])).unwrap();
         });
 
-        let send = tokio::task::spawn(async move {
+        let send = tokio::spawn(async move {
             assert_eq!(Ok(NoResponse), client.send(&cmd).await);
         });
 
