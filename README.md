@@ -61,7 +61,7 @@ This workspace uses `cargo-release` to do workspace releases to crates.io. It ca
 
 ## About
 
-- Minimum rustc version 1.52
+- Minimum rustc version 1.79
 - Tested and built using stable toolchain
 
 ## Supported Crates
@@ -109,8 +109,8 @@ The following dependent crates provide platform-agnostic device drivers built on
 - `log`: Disabled by default. Enable log statements on various log levels to aid debugging. Powered by `log`.
 - `defmt`: Disabled by default. Enable defmt log statements on various log levels to aid debugging. Powered by `defmt`.
 - `custom-error-messages`: Disabled by default. Allows errors to contain custom error messages up to 64 characters, parsed by `AtDigest::custom_error`.
-- `async`: Enable the async interfaces on both `Ingress` and `Client`.
-- `hex_str_arrays`: Disabled by default. Needs `#![feature(generic_const_exprs)]` Nightly feature. This allows for hex strings to be serialized to a fix-width byte array. 
+- `hex_str_arrays`: Disabled by default. Needs `#![feature(generic_const_exprs)]` Nightly feature. This allows for hex strings to be serialized to a fix-width byte array.
+- `heapless`: Enable heapless feature on `serde_at`. This enables heapless support and adds some specialized parsing structs.
 
 ## Chat / Getting Help
 

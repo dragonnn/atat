@@ -1,5 +1,3 @@
-#![feature(type_alias_impl_trait)]
-#![allow(incomplete_features)]
 use atat_examples::common;
 
 use atat::{
@@ -7,6 +5,7 @@ use atat::{
     AtatIngress, Config, DefaultDigester, Ingress, ResponseSlot, UrcChannel,
 };
 use embedded_io_adapters::tokio_1::FromTokio;
+use static_cell::StaticCell;
 use std::process::exit;
 use tokio_serial::SerialStream;
 
@@ -14,20 +13,31 @@ const INGRESS_BUF_SIZE: usize = 1024;
 const URC_CAPACITY: usize = 128;
 const URC_SUBSCRIBERS: usize = 3;
 
+macro_rules! singleton {
+    ($val:expr) => {{
+        type T = impl Sized;
+        static STATIC_CELL: StaticCell<T> = StaticCell::new();
+        let (x,) = STATIC_CELL.init(($val,));
+        x
+    }};
+}
+
 #[tokio::main]
 async fn main() -> ! {
     env_logger::init();
 
     let (reader, writer) = SerialStream::pair().expect("Failed to create serial pair");
-
+    static INGRESS_BUF: StaticCell<[u8; INGRESS_BUF_SIZE]> = StaticCell::new();
     static RES_SLOT: ResponseSlot<INGRESS_BUF_SIZE> = ResponseSlot::new();
     static URC_CHANNEL: UrcChannel<common::Urc, URC_CAPACITY, URC_SUBSCRIBERS> = UrcChannel::new();
     let ingress = Ingress::new(
         DefaultDigester::<common::Urc>::default(),
+        INGRESS_BUF.init([0; INGRESS_BUF_SIZE]),
         &RES_SLOT,
         &URC_CHANNEL,
     );
-    let buf = static_cell::make_static!([0; 1024]);
+    static BUF: StaticCell<[u8; 1024]> = StaticCell::new();
+    let buf = BUF.init([0; 1024]);
     let mut client = Client::new(FromTokio::new(writer), &RES_SLOT, buf, Config::default());
 
     tokio::spawn(ingress_task(ingress, FromTokio::new(reader)));

@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
 
 use atat::{
     asynch::{AtatClient, Client},
@@ -13,6 +12,7 @@ use embassy_rp::{
     peripherals::UART0,
     uart::{self, BufferedInterruptHandler, BufferedUart, BufferedUartRx},
 };
+use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 const INGRESS_BUF_SIZE: usize = 1024;
@@ -29,15 +29,16 @@ async fn main(spawner: Spawner) {
 
     let (tx_pin, rx_pin, uart) = (p.PIN_0, p.PIN_1, p.UART0);
 
-    let tx_buf = static_cell::make_static!([0u8; 16]);
-    let rx_buf = static_cell::make_static!([0u8; 16]);
+    static INGRESS_BUF: StaticCell<[u8; INGRESS_BUF_SIZE]> = StaticCell::new();
+    static TX_BUF: StaticCell<[u8; 16]> = StaticCell::new();
+    static RX_BUF: StaticCell<[u8; 16]> = StaticCell::new();
     let uart = BufferedUart::new(
         uart,
         Irqs,
         tx_pin,
         rx_pin,
-        tx_buf,
-        rx_buf,
+        TX_BUF.init([0; 16]),
+        RX_BUF.init([0; 16]),
         uart::Config::default(),
     );
     let (reader, writer) = uart.split();
@@ -46,11 +47,17 @@ async fn main(spawner: Spawner) {
     static URC_CHANNEL: UrcChannel<common::Urc, URC_CAPACITY, URC_SUBSCRIBERS> = UrcChannel::new();
     let ingress = Ingress::new(
         DefaultDigester::<common::Urc>::default(),
+        INGRESS_BUF.init([0; INGRESS_BUF_SIZE]),
         &RES_SLOT,
         &URC_CHANNEL,
     );
-    let buf = static_cell::make_static!([0; 1024]);
-    let mut client = Client::new(writer, &RES_SLOT, buf, atat::Config::default());
+    static BUF: StaticCell<[u8; 1024]> = StaticCell::new();
+    let mut client = Client::new(
+        writer,
+        &RES_SLOT,
+        BUF.init([0; 1024]),
+        atat::Config::default(),
+    );
 
     spawner.spawn(ingress_task(ingress, reader)).unwrap();
 

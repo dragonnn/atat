@@ -10,6 +10,7 @@ pub enum DigestResult<'a> {
     None,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseError {
     Incomplete,
     NoMatch,
@@ -200,7 +201,7 @@ pub mod parser {
         branch::alt,
         bytes::streaming::tag,
         character::complete,
-        combinator::{eof, map, map_res, not, recognize},
+        combinator::{eof, map, map_res, recognize},
         error::ParseError,
         sequence::tuple,
         IResult,
@@ -255,6 +256,7 @@ pub mod parser {
                 )
             }),
             // Matches the equivalent of regex: "\r\n\+CME ERROR:\s*([^\n\r]+)\r\n"
+            #[cfg(feature = "string_errors")]
             map(string_error("\r\n+CME ERROR:"), |(error_msg, len)| {
                 (
                     DigestResult::Response(Err(InternalError::CmeError(CmeError::from_msg(
@@ -264,6 +266,7 @@ pub mod parser {
                 )
             }),
             // Matches the equivalent of regex: "\r\n\+CMS ERROR:\s*([^\n\r]+)\r\n"
+            #[cfg(feature = "string_errors")]
             map(string_error("\r\n+CMS ERROR:"), |(error_msg, len)| {
                 (
                     DigestResult::Response(Err(InternalError::CmsError(CmsError::from_msg(
@@ -328,8 +331,8 @@ pub mod parser {
                 nom::combinator::success(&b""[..]),
             )),
             tuple((
-                take_until_including("\r\nCONNECT"),
-                recognize(take_until_including("\r\n")),
+                take_until_including("\r\nCONNECT\r\n"),
+                nom::combinator::success(&b""[..]),
             )),
         ))(buf)?;
 
@@ -351,7 +354,7 @@ pub mod parser {
         recognize(nom::bytes::complete::take_until("\r\n"))(buf)
     }
 
-    fn take_until_including<T, Input, Error: ParseError<Input>>(
+    pub fn take_until_including<T, Input, Error: ParseError<Input>>(
         tag: T,
     ) -> impl Fn(Input) -> IResult<Input, (Input, Input), Error>
     where
@@ -396,6 +399,7 @@ pub mod parser {
     }
 
     /// Matches the equivalent of regex: "{token}\s*([^\n\r]+)\r\n"
+    #[cfg(feature = "string_errors")]
     fn string_error<'a, T, Error: ParseError<&'a [u8]>>(
         token: T,
     ) -> impl Fn(&'a [u8]) -> IResult<&'a [u8], (&'a [u8], usize), Error>
@@ -406,7 +410,7 @@ pub mod parser {
         move |i| {
             let (i, (prefix_data, _, error_msg)) = tuple((
                 recognize(take_until_including(token.clone())),
-                not(tag("\r")),
+                nom::combinator::not(tag("\r")),
                 recognize(take_until_including("\r\n")),
             ))(i)?;
 
@@ -553,6 +557,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "string_errors")]
     fn mm_error() {
         let tests: Vec<(&[u8], DigestResult, usize)> = vec![
             (b"\r\nUNKNOWN COMMAND\r\n", DigestResult::None, 0),
@@ -1043,6 +1048,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "string_errors")]
     fn verbose_error_response() {
         let mut digester = AtDigester::<UrcTestParser>::new();
         let mut buf = heapless::Vec::<u8, TEST_RX_BUF_LEN>::new();
