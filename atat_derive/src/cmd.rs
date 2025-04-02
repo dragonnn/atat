@@ -131,7 +131,7 @@ pub fn atat_cmd(input: TokenStream) -> TokenStream {
         quote! {
             #[inline]
             fn write(&self, buf: &mut [u8]) -> usize {
-                #write(buf)
+                #write(self, buf)
             }
         }
     } else {
