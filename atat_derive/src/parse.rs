@@ -322,6 +322,18 @@ impl Parse for CmdAttributes {
                         ))
                     }
                 }
+            } else if optional.path.is_ident("write") {
+                match optional.value {
+                    Expr::Path(ExprPath { path, .. }) => {
+                        at_cmd.write = Some(path);
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            Span::call_site(),
+                            "expected function for 'parse'",
+                        ))
+                    }
+                }
             } else if optional.path.is_ident("reattempt_on_parse_err") {
                 match optional.value {
                     Expr::Lit(ExprLit {
