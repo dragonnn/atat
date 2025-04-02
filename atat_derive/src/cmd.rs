@@ -18,6 +18,7 @@ pub fn atat_cmd(input: TokenStream) -> TokenStream {
         cmd,
         resp,
         parse,
+        write,
         timeout_ms,
         attempts,
         reattempt_on_parse_err,
@@ -126,6 +127,30 @@ pub fn atat_cmd(input: TokenStream) -> TokenStream {
         }
     };
 
+    let write = if let Some(write) = write {
+        quote! {
+            #[inline]
+            fn write(&self, buf: &mut [u8]) -> usize {
+                #write(buf)
+            }
+        }
+    } else {
+        quote! {
+            #[inline]
+            fn write(&self, buf: &mut [u8]) -> usize {
+                match atat::serde_at::to_slice(self, #cmd, buf, atat::serde_at::SerializeOptions {
+                    value_sep: #value_sep,
+                    cmd_prefix: #cmd_prefix,
+                    termination: #termination,
+                    quote_escape_strings: #quote_escape_strings
+                }) {
+                    Ok(s) => s,
+                    Err(_) => panic!("Failed to serialize command")
+                }
+            }
+        }
+    };
+
     TokenStream::from(quote! {
         #[automatically_derived]
         impl #impl_generics atat::AtatLen for #ident #ty_generics #where_clause {
@@ -150,18 +175,7 @@ pub fn atat_cmd(input: TokenStream) -> TokenStream {
 
             #reattempt_on_parse_err
 
-            #[inline]
-            fn write(&self, buf: &mut [u8]) -> usize {
-                match atat::serde_at::to_slice(self, #cmd, buf, atat::serde_at::SerializeOptions {
-                    value_sep: #value_sep,
-                    cmd_prefix: #cmd_prefix,
-                    termination: #termination,
-                    quote_escape_strings: #quote_escape_strings
-                }) {
-                    Ok(s) => s,
-                    Err(_) => panic!("Failed to serialize command")
-                }
-            }
+            #write
 
             #parse
         }
